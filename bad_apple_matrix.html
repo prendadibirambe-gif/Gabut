@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Bad Apple - Looping Code Visualizer + Audio</title>
+    <title>Bad Apple - Matrix Code + Audio</title>
     <style>
         body {
             background-color: black;
@@ -50,21 +50,27 @@
 <body>
     <div id="ui">
         <h2>Sistem Siap</h2>
-        <p>Klik tombol di bawah untuk memulai visual dan audio.</p>
-        <!-- Tombol ini wajib ada agar browser mengizinkan pemutaran suara -->
+        <p>Visual Matrix dan Audio MP3 akan diputar bersamaan.</p>
         <button id="start-btn">Inisialisasi Sistem</button>
     </div>
 
     <canvas id="matrix-canvas"></canvas>
 
-    <!-- Atribut 'muted' telah dihapus agar suara video bisa keluar -->
+    <!-- Video bisu untuk dirender ke dalam teks -->
     <video id="hidden-video" crossorigin="anonymous" loop playsinline style="display: none;">
         <source src="https://raw.githubusercontent.com/trung-kieen/bad-apple-ascii/main/bad_apple.mp4" type="video/mp4">
     </video>
+    
+    <!-- Audio terpisah yang diambil dari arsip internet -->
+    <audio id="hidden-audio" crossorigin="anonymous" loop style="display: none;">
+        <source src="https://archive.org/download/TouhouBadApple/Touhou%20-%20Bad%20Apple.mp3" type="audio/mpeg">
+    </audio>
+
     <canvas id="hidden-canvas" style="display: none;"></canvas>
 
     <script>
         const video = document.getElementById('hidden-video');
+        const audio = document.getElementById('hidden-audio');
         const hiddenCanvas = document.getElementById('hidden-canvas');
         const hiddenCtx = hiddenCanvas.getContext('2d', { willReadFrequently: true });
         const matrixCanvas = document.getElementById('matrix-canvas');
@@ -81,10 +87,15 @@
 
         btn.addEventListener('click', () => {
             ui.style.display = 'none';
-            // Mengatur volume maksimal
-            video.volume = 1.0; 
+            // Memutar video dan audio secara bersamaan
             video.play();
+            audio.volume = 1.0;
+            audio.play();
         });
+
+        // Sinkronisasi jika video *buffering* (Audio ikut berhenti sementara)
+        video.addEventListener('waiting', () => audio.pause());
+        video.addEventListener('playing', () => audio.play());
 
         video.addEventListener('loadedmetadata', () => {
             const aspect = video.videoHeight / video.videoWidth;
