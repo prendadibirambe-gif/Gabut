@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Bad Apple - Matrix Code + Audio</title>
+    <title>Bad Apple - Render to Video</title>
     <style>
         body {
             background-color: black;
@@ -13,6 +13,7 @@
             align-items: center;
             height: 100vh;
             font-family: monospace;
+            color: #00ff00;
         }
         canvas {
             display: block;
@@ -23,8 +24,8 @@
             position: absolute;
             z-index: 10;
             text-align: center;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 30px;
             border: 1px solid #00ff00;
             border-radius: 10px;
         }
@@ -38,34 +39,30 @@
             font-size: 16px;
             cursor: pointer;
             transition: 0.3s;
+            margin: 5px;
         }
-        button:hover {
-            background: #00cc00;
-            box-shadow: 0 0 15px #00ff00;
-        }
-        h2 { color: #00ff00; margin-top: 0; }
-        p { color: white; margin-bottom: 20px; }
+        button:hover { background: #00cc00; box-shadow: 0 0 15px #00ff00; }
+        #status-text { margin-top: 15px; font-weight: bold; }
     </style>
 </head>
 <body>
     <div id="ui">
-        <h2>Sistem Siap</h2>
-        <p>Visual Matrix dan Audio MP3 akan diputar bersamaan.</p>
-        <button id="start-btn">Inisialisasi Sistem</button>
+        <h2 style="margin-top: 0;">Sistem Ekspor Video</h2>
+        <p style="color: white; margin-bottom: 20px;">Pilih mode eksekusi untuk Visual Matrix.</p>
+        <button id="play-btn">Hanya Putar</button>
+        <button id="record-btn">Putar & Rekam (Export Video)</button>
+        <div id="status-text"></div>
     </div>
 
     <canvas id="matrix-canvas"></canvas>
 
-    <!-- Video bisu untuk dirender ke dalam teks -->
-    <video id="hidden-video" crossorigin="anonymous" loop playsinline style="display: none;">
+    <!-- Sumber Media -->
+    <video id="hidden-video" crossorigin="anonymous" playsinline style="display: none;">
         <source src="https://raw.githubusercontent.com/trung-kieen/bad-apple-ascii/main/bad_apple.mp4" type="video/mp4">
     </video>
-    
-    <!-- Audio terpisah yang diambil dari arsip internet -->
-    <audio id="hidden-audio" crossorigin="anonymous" loop style="display: none;">
+    <audio id="hidden-audio" crossorigin="anonymous" style="display: none;">
         <source src="https://archive.org/download/TouhouBadApple/Touhou%20-%20Bad%20Apple.mp3" type="audio/mpeg">
     </audio>
-
     <canvas id="hidden-canvas" style="display: none;"></canvas>
 
     <script>
@@ -75,40 +72,89 @@
         const hiddenCtx = hiddenCanvas.getContext('2d', { willReadFrequently: true });
         const matrixCanvas = document.getElementById('matrix-canvas');
         const matrixCtx = matrixCanvas.getContext('2d');
-        const btn = document.getElementById('start-btn');
         const ui = document.getElementById('ui');
+        const statusText = document.getElementById('status-text');
 
         const codeString = "while(true){render_bad_apple(); sys.loop(); matrix.update();} ";
         let frameOffset = 0; 
-
         const cols = 130; 
         let rows;
         const fontSize = 8;
 
-        btn.addEventListener('click', () => {
-            ui.style.display = 'none';
-            // Memutar video dan audio secara bersamaan
-            video.play();
-            audio.volume = 1.0;
-            audio.play();
-        });
+        let mediaRecorder;
+        let recordedChunks = [];
+        let isRecording = false;
 
-        // Sinkronisasi jika video *buffering* (Audio ikut berhenti sementara)
-        video.addEventListener('waiting', () => audio.pause());
-        video.addEventListener('playing', () => audio.play());
+        document.getElementById('play-btn').addEventListener('click', () => startSystem(false));
+        document.getElementById('record-btn').addEventListener('click', () => startSystem(true));
 
         video.addEventListener('loadedmetadata', () => {
             const aspect = video.videoHeight / video.videoWidth;
             rows = Math.floor(cols * aspect * 0.6); 
-            
             hiddenCanvas.width = cols;
             hiddenCanvas.height = rows;
-            
             matrixCanvas.width = cols * fontSize;
             matrixCanvas.height = rows * fontSize;
-            
             matrixCtx.font = fontSize + "px monospace";
             matrixCtx.textBaseline = "top";
+        });
+
+        function startSystem(recordMode) {
+            isRecording = recordMode;
+            ui.style.display = 'none';
+            
+            if (isRecording) {
+                setupRecorder();
+                // Munculkan kembali UI kecil untuk status
+                ui.style.display = 'block';
+                ui.style.background = 'transparent';
+                ui.style.border = 'none';
+                ui.innerHTML = "<h3 style='color:red;'>🔴 MEREKAM VIDEO...</h3>";
+                ui.style.top = '10px';
+                ui.style.right = '10px';
+            }
+
+            video.play();
+            audio.volume = 1.0;
+            audio.play();
+        }
+
+        function setupRecorder() {
+            // Ambil stream gambar dari canvas (30 FPS)
+            const canvasStream = matrixCanvas.captureStream(30);
+            
+            // Gabungkan menjadi media recorder untuk diekspor
+            mediaRecorder = new MediaRecorder(canvasStream, { mimeType: 'video/webm' });
+            
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) recordedChunks.push(e.data);
+            };
+
+            mediaRecorder.onstop = () => {
+                ui.innerHTML = "<h3 style='color:#00ff00;'>✅ Render Selesai! Mengunduh Video...</h3>";
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = 'Bad_Apple_Matrix_Render.webm';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+            };
+
+            mediaRecorder.start();
+        }
+
+        // Sinkronisasi Video dan Audio
+        video.addEventListener('waiting', () => audio.pause());
+        video.addEventListener('playing', () => audio.play());
+
+        // Hentikan rekaman dan otomatis download saat video habis
+        video.addEventListener('ended', () => {
+            if (isRecording && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
         });
 
         function renderMatrix() {
@@ -131,7 +177,6 @@
                 for (let x = 0; x < cols; x++) {
                     const index = (y * cols + x) * 4;
                     const brightness = (data[index] * 0.299 + data[index + 1] * 0.587 + data[index + 2] * 0.114);
-
                     const char = codeString[codeIndex % codeString.length];
                     codeIndex++;
 
