@@ -2,95 +2,73 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Bad Apple - Render to Video</title>
+    <title>Bad Apple - Matrix Offline Render</title>
     <style>
-        body {
-            background-color: black;
-            margin: 0;
-            overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            font-family: monospace;
-            color: #00ff00;
-        }
-        canvas {
-            display: block;
-            box-shadow: 0 0 20px #00ff00; 
-            border: 1px solid #00ff00;
-        }
-        #ui {
-            position: absolute;
-            z-index: 10;
-            text-align: center;
-            background: rgba(0, 0, 0, 0.9);
-            padding: 30px;
-            border: 1px solid #00ff00;
-            border-radius: 10px;
-        }
-        button {
-            background: #00ff00;
-            color: black;
-            border: none;
-            padding: 10px 20px;
-            font-family: monospace;
-            font-weight: bold;
-            font-size: 16px;
-            cursor: pointer;
-            transition: 0.3s;
-            margin: 5px;
-        }
-        button:hover { background: #00cc00; box-shadow: 0 0 15px #00ff00; }
-        #status-text { margin-top: 15px; font-weight: bold; }
+        body { background: black; color: #00ff00; font-family: monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; overflow: hidden; }
+        canvas { box-shadow: 0 0 20px #00ff00; border: 1px solid #00ff00; max-height: 85vh; }
+        #ui { position: absolute; background: rgba(0,0,0,0.9); padding: 20px; border: 1px solid #00ff00; border-radius: 10px; text-align: center; z-index: 10; }
+        button, input { background: #00ff00; color: black; border: none; padding: 10px; font-family: monospace; font-weight: bold; cursor: pointer; margin: 5px; }
+        button:hover { background: #00cc00; }
+        h2 { margin-top: 0; }
     </style>
 </head>
 <body>
     <div id="ui">
-        <h2 style="margin-top: 0;">Sistem Ekspor Video</h2>
-        <p style="color: white; margin-bottom: 20px;">Pilih mode eksekusi untuk Visual Matrix.</p>
-        <button id="play-btn">Hanya Putar</button>
-        <button id="record-btn">Putar & Rekam (Export Video)</button>
-        <div id="status-text"></div>
+        <h2>Sistem Ekspor Matrix (Mode Anti-Error)</h2>
+        <p style="color:white;">Pilih file video Bad Apple (.mp4) dari perangkat Anda.</p>
+        
+        <!-- Input File Lokal -->
+        <input type="file" id="video-input" accept="video/mp4,video/webm,video/mkv"><br><br>
+        
+        <button id="play-btn" style="display:none;">Hanya Putar</button>
+        <button id="record-btn" style="display:none;">Putar & Rekam Video (.webm)</button>
+        <div id="status"></div>
     </div>
 
+    <!-- Canvas Layar Utama -->
     <canvas id="matrix-canvas"></canvas>
-
-    <!-- Sumber Media -->
-    <video id="hidden-video" crossorigin="anonymous" playsinline style="display: none;">
-        <source src="https://raw.githubusercontent.com/trung-kieen/bad-apple-ascii/main/bad_apple.mp4" type="video/mp4">
-    </video>
-    <audio id="hidden-audio" crossorigin="anonymous" style="display: none;">
-        <source src="https://archive.org/download/TouhouBadApple/Touhou%20-%20Bad%20Apple.mp3" type="audio/mpeg">
-    </audio>
+    
+    <!-- Video Tersembunyi (Offline) -->
+    <video id="hidden-video" style="display: none;" playsinline></video>
     <canvas id="hidden-canvas" style="display: none;"></canvas>
 
     <script>
         const video = document.getElementById('hidden-video');
-        const audio = document.getElementById('hidden-audio');
         const hiddenCanvas = document.getElementById('hidden-canvas');
         const hiddenCtx = hiddenCanvas.getContext('2d', { willReadFrequently: true });
         const matrixCanvas = document.getElementById('matrix-canvas');
         const matrixCtx = matrixCanvas.getContext('2d');
+        const fileInput = document.getElementById('video-input');
+        const playBtn = document.getElementById('play-btn');
+        const recordBtn = document.getElementById('record-btn');
         const ui = document.getElementById('ui');
-        const statusText = document.getElementById('status-text');
+        const status = document.getElementById('status');
 
         const codeString = "while(true){render_bad_apple(); sys.loop(); matrix.update();} ";
-        let frameOffset = 0; 
-        const cols = 130; 
+        let frameOffset = 0;
+        const cols = 130;
         let rows;
         const fontSize = 8;
-
+        
+        let isRecording = false;
         let mediaRecorder;
         let recordedChunks = [];
-        let isRecording = false;
+        let stream;
 
-        document.getElementById('play-btn').addEventListener('click', () => startSystem(false));
-        document.getElementById('record-btn').addEventListener('click', () => startSystem(true));
+        // 1. Baca file lokal saat user memilih video
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            video.src = URL.createObjectURL(file);
+            playBtn.style.display = 'inline-block';
+            recordBtn.style.display = 'inline-block';
+            status.innerHTML = "<br>✅ Video berhasil dimuat. Pilih mode di atas.";
+        });
 
+        // 2. Setup ukuran kanvas setelah file dibaca
         video.addEventListener('loadedmetadata', () => {
             const aspect = video.videoHeight / video.videoWidth;
-            rows = Math.floor(cols * aspect * 0.6); 
+            rows = Math.floor(cols * aspect * 0.6);
             hiddenCanvas.width = cols;
             hiddenCanvas.height = rows;
             matrixCanvas.width = cols * fontSize;
@@ -99,58 +77,57 @@
             matrixCtx.textBaseline = "top";
         });
 
+        playBtn.addEventListener('click', () => startSystem(false));
+        recordBtn.addEventListener('click', () => startSystem(true));
+
         function startSystem(recordMode) {
             isRecording = recordMode;
             ui.style.display = 'none';
-            
+
             if (isRecording) {
-                setupRecorder();
-                // Munculkan kembali UI kecil untuk status
                 ui.style.display = 'block';
                 ui.style.background = 'transparent';
                 ui.style.border = 'none';
-                ui.innerHTML = "<h3 style='color:red;'>🔴 MEREKAM VIDEO...</h3>";
+                ui.innerHTML = "<h3 style='color:red;'>🔴 MEREKAM ANIMASI...</h3>";
                 ui.style.top = '10px';
                 ui.style.right = '10px';
+                
+                // Ambil stream visual dari kanvas
+                const canvasStream = matrixCanvas.captureStream(30);
+                stream = new MediaStream([canvasStream.getVideoTracks()[0]]);
+                
+                // Coba ambil stream audio dari video (jika video sumber punya suara)
+                try {
+                    const audioStream = video.captureStream ? video.captureStream() : (video.mozCaptureStream ? video.mozCaptureStream() : null);
+                    if(audioStream && audioStream.getAudioTracks().length > 0) {
+                        stream.addTrack(audioStream.getAudioTracks()[0]);
+                    }
+                } catch(e) { 
+                    console.warn("Tidak dapat menangkap audio, merender tanpa suara."); 
+                }
+
+                // Mulai Merekam
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+                mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+                
+                mediaRecorder.onstop = () => {
+                    ui.innerHTML = "<h3 style='color:#00ff00;'>✅ Render Selesai! Mengunduh...</h3>";
+                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'Bad_Apple_Matrix_Render.webm';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                };
+                mediaRecorder.start();
             }
-
+            video.volume = 1.0;
             video.play();
-            audio.volume = 1.0;
-            audio.play();
+            renderMatrix();
         }
 
-        function setupRecorder() {
-            // Ambil stream gambar dari canvas (30 FPS)
-            const canvasStream = matrixCanvas.captureStream(30);
-            
-            // Gabungkan menjadi media recorder untuk diekspor
-            mediaRecorder = new MediaRecorder(canvasStream, { mimeType: 'video/webm' });
-            
-            mediaRecorder.ondataavailable = (e) => {
-                if (e.data.size > 0) recordedChunks.push(e.data);
-            };
-
-            mediaRecorder.onstop = () => {
-                ui.innerHTML = "<h3 style='color:#00ff00;'>✅ Render Selesai! Mengunduh Video...</h3>";
-                const blob = new Blob(recordedChunks, { type: 'video/webm' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = 'Bad_Apple_Matrix_Render.webm';
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-            };
-
-            mediaRecorder.start();
-        }
-
-        // Sinkronisasi Video dan Audio
-        video.addEventListener('waiting', () => audio.pause());
-        video.addEventListener('playing', () => audio.play());
-
-        // Hentikan rekaman dan otomatis download saat video habis
+        // Hentikan rekaman saat video habis
         video.addEventListener('ended', () => {
             if (isRecording && mediaRecorder.state === 'recording') {
                 mediaRecorder.stop();
@@ -159,27 +136,27 @@
 
         function renderMatrix() {
             if (video.paused || video.ended) {
-                requestAnimationFrame(renderMatrix);
+                if(!video.ended) requestAnimationFrame(renderMatrix);
                 return;
             }
-
+            
+            // Proses mengubah gambar menjadi kode
             hiddenCtx.drawImage(video, 0, 0, cols, rows);
-            const frame = hiddenCtx.getImageData(0, 0, cols, rows);
-            const data = frame.data;
-
+            const data = hiddenCtx.getImageData(0, 0, cols, rows).data;
+            
             matrixCtx.fillStyle = 'black';
             matrixCtx.fillRect(0, 0, matrixCanvas.width, matrixCanvas.height);
-
+            
             frameOffset++;
             let codeIndex = frameOffset;
 
             for (let y = 0; y < rows; y++) {
                 for (let x = 0; x < cols; x++) {
-                    const index = (y * cols + x) * 4;
-                    const brightness = (data[index] * 0.299 + data[index + 1] * 0.587 + data[index + 2] * 0.114);
+                    const idx = (y * cols + x) * 4;
+                    const brightness = data[idx]*0.299 + data[idx+1]*0.587 + data[idx+2]*0.114;
                     const char = codeString[codeIndex % codeString.length];
                     codeIndex++;
-
+                    
                     if (brightness > 128) { 
                         matrixCtx.fillStyle = '#00ff00'; 
                         matrixCtx.fillText(char, x * fontSize, y * fontSize);
@@ -189,13 +166,8 @@
                     }
                 }
             }
-
             requestAnimationFrame(renderMatrix);
         }
-
-        video.addEventListener('play', () => {
-            renderMatrix();
-        });
     </script>
 </body>
 </html>
