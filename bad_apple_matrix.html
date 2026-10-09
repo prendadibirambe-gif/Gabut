@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Bad Apple - Looping Code Visualizer</title>
+    <title>Bad Apple - Looping Code Visualizer + Audio</title>
     <style>
         body {
             background-color: black;
@@ -16,7 +16,6 @@
         }
         canvas {
             display: block;
-            /* Memberikan efek cahaya (glow) agar lebih keren */
             box-shadow: 0 0 20px #00ff00; 
             border: 1px solid #00ff00;
         }
@@ -42,23 +41,24 @@
         }
         button:hover {
             background: #00cc00;
-            box-shadow: 0 0 10px #00ff00;
+            box-shadow: 0 0 15px #00ff00;
         }
         h2 { color: #00ff00; margin-top: 0; }
+        p { color: white; margin-bottom: 20px; }
     </style>
 </head>
 <body>
     <div id="ui">
-        <h2>Visual Looping Code</h2>
-        <p style="color: white;">Bentuk video akan dirender menggunakan baris kode.</p>
+        <h2>Sistem Siap</h2>
+        <p>Klik tombol di bawah untuk memulai visual dan audio.</p>
+        <!-- Tombol ini wajib ada agar browser mengizinkan pemutaran suara -->
         <button id="start-btn">Inisialisasi Sistem</button>
     </div>
 
-    <!-- Canvas utama tempat 'looping code' akan digambar -->
     <canvas id="matrix-canvas"></canvas>
 
-    <!-- Video dan kanvas tersembunyi untuk membaca piksel dari internet -->
-    <video id="hidden-video" crossorigin="anonymous" loop muted playsinline style="display: none;">
+    <!-- Atribut 'muted' telah dihapus agar suara video bisa keluar -->
+    <video id="hidden-video" crossorigin="anonymous" loop playsinline style="display: none;">
         <source src="https://raw.githubusercontent.com/trung-kieen/bad-apple-ascii/main/bad_apple.mp4" type="video/mp4">
     </video>
     <canvas id="hidden-canvas" style="display: none;"></canvas>
@@ -72,28 +72,27 @@
         const btn = document.getElementById('start-btn');
         const ui = document.getElementById('ui');
 
-        // ==== KODE YANG AKAN DILOOPING UNTUK MEMBENTUK VISUAL ====
         const codeString = "while(true){render_bad_apple(); sys.loop(); matrix.update();} ";
-        let frameOffset = 0; // Digunakan agar kode tampak mengalir terus menerus
+        let frameOffset = 0; 
 
-        const cols = 130; // Semakin tinggi nilainya, semakin rapat/detail tulisannya
+        const cols = 130; 
         let rows;
         const fontSize = 8;
 
         btn.addEventListener('click', () => {
             ui.style.display = 'none';
+            // Mengatur volume maksimal
+            video.volume = 1.0; 
             video.play();
         });
 
-        // Setup ukuran canvas saat video terdeteksi
         video.addEventListener('loadedmetadata', () => {
             const aspect = video.videoHeight / video.videoWidth;
-            rows = Math.floor(cols * aspect * 0.6); // Koreksi karena font lebih tinggi daripada lebarnya
+            rows = Math.floor(cols * aspect * 0.6); 
             
             hiddenCanvas.width = cols;
             hiddenCanvas.height = rows;
             
-            // Canvas layar disesuaikan dengan perkalian ukuran font
             matrixCanvas.width = cols * fontSize;
             matrixCanvas.height = rows * fontSize;
             
@@ -107,35 +106,28 @@
                 return;
             }
 
-            // Baca piksel frame video saat ini
             hiddenCtx.drawImage(video, 0, 0, cols, rows);
             const frame = hiddenCtx.getImageData(0, 0, cols, rows);
             const data = frame.data;
 
-            // Bersihkan kanvas menjadi hitam setiap frame (seperti me-refresh terminal)
             matrixCtx.fillStyle = 'black';
             matrixCtx.fillRect(0, 0, matrixCanvas.width, matrixCanvas.height);
 
-            // Geser index awal setiap frame agar teks terlihat mengalir (looping animation)
             frameOffset++;
             let codeIndex = frameOffset;
 
-            // Gambar kode ke layar berdasarkan kecerahan video
             for (let y = 0; y < rows; y++) {
                 for (let x = 0; x < cols; x++) {
                     const index = (y * cols + x) * 4;
                     const brightness = (data[index] * 0.299 + data[index + 1] * 0.587 + data[index + 2] * 0.114);
 
-                    // Ambil satu huruf dari barisan looping code kita
                     const char = codeString[codeIndex % codeString.length];
                     codeIndex++;
 
-                    // Jika area video ini terang (putih), gambar teks kode dengan warna hijau neon
                     if (brightness > 128) { 
-                        matrixCtx.fillStyle = '#00ff00'; // Hijau ala Matrix/Hacker
+                        matrixCtx.fillStyle = '#00ff00'; 
                         matrixCtx.fillText(char, x * fontSize, y * fontSize);
                     } else {
-                        // Jika gelap, gambar kodenya sangat redup agar membentuk siluet hitam
                         matrixCtx.fillStyle = '#112211'; 
                         matrixCtx.fillText(char, x * fontSize, y * fontSize);
                     }
