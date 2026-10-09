@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Auto Loop Bad Apple ASCII</title>
+    <style>
+        body {
+            background-color: black;
+            color: white;
+            font-family: monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            flex-direction: column;
+        }
+        #ascii-display {
+            font-size: 8px; /* Ukuran font agar gambar utuh */
+            line-height: 8px;
+            letter-spacing: 2px;
+            white-space: pre;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #00ffcc;
+            border: none;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <button id="start-btn">Klik untuk Mulai Looping Animasi</button>
+    <div id="ascii-display"></div>
+
+    <!-- Atribut 'loop' membuat video otomatis mengulang dari awal saat selesai -->
+    <!-- Video diambil langsung dari raw github (internet) -->
+    <video id="hidden-video" crossorigin="anonymous" loop style="display: none;" playsinline>
+        <source src="https://raw.githubusercontent.com/trung-kieen/bad-apple-ascii/main/bad_apple.mp4" type="video/mp4">
+    </video>
+    <canvas id="hidden-canvas" style="display: none;"></canvas>
+
+    <script>
+        const video = document.getElementById('hidden-video');
+        const canvas = document.getElementById('hidden-canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const asciiDisplay = document.getElementById('ascii-display');
+        const btn = document.getElementById('start-btn');
+
+        // Palet karakter ASCII
+        const asciiChars = ['@', '#', 'S', '%', '?', '*', '+', ';', ':', ',', '.', ' '];
+        const asciiWidth = 100; 
+        let asciiHeight;
+
+        btn.addEventListener('click', () => {
+            btn.style.display = 'none';
+            asciiDisplay.textContent = "Mengambil data dari internet, harap tunggu sebentar...";
+            video.play().catch(e => {
+                asciiDisplay.textContent = "Gagal memutar. Pastikan koneksi internet Anda aktif.";
+            });
+        });
+
+        video.addEventListener('loadedmetadata', () => {
+            const aspect = video.videoHeight / video.videoWidth;
+            asciiHeight = Math.floor(asciiWidth * aspect * 0.45); 
+            canvas.width = asciiWidth;
+            canvas.height = asciiHeight;
+        });
+
+        function renderFrame() {
+            if (video.paused) {
+                requestAnimationFrame(renderFrame);
+                return;
+            }
+            
+            ctx.drawImage(video, 0, 0, asciiWidth, asciiHeight);
+            const frame = ctx.getImageData(0, 0, asciiWidth, asciiHeight);
+            const data = frame.data;
+            let asciiStr = '';
+
+            for (let i = 0; i < data.length; i += 4) {
+                // Hitung kecerahan warna (brightness)
+                const brightness = (data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114);
+                const charIndex = Math.floor((brightness / 255) * (asciiChars.length - 1));
+                
+                asciiStr += asciiChars[charIndex];
+                if ((i / 4 + 1) % asciiWidth === 0) {
+                    asciiStr += '\n';
+                }
+            }
+            
+            asciiDisplay.textContent = asciiStr;
+            requestAnimationFrame(renderFrame);
+        }
+
+        video.addEventListener('play', () => {
+            renderFrame();
+        });
+    </script>
+</body>
+</html>
